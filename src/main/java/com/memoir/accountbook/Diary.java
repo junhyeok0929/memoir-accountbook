@@ -1,7 +1,7 @@
 package com.memoir.accountbook;
 
 import jakarta.persistence.*;
-import lombok.*; // lombok.* 로 변경했습니다.
+import lombok.*;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -28,7 +28,7 @@ public class Diary {
     @Column(nullable = false)
     private String title;
 
-    @Lob // 내용을 길게 작성할 수 있도록 설정
+    @Lob
     @Column(nullable = false)
     private String content;
 
@@ -39,11 +39,21 @@ public class Diary {
     @Column(nullable = false)
     private LocalDateTime createdAt;
 
-    private LocalDateTime updatedAt;
+    private LocalDateTime updatedAt; // <--- 수정 시간을 기록할 필드 (없었다면 추가)
 
     @PrePersist
     public void prePersist() {
         this.createdAt = LocalDateTime.now();
-        // this.updatedAt = LocalDateTime.now(); // 필요하다면 이것도 추가할 수 있어요.
+    }
+
+    // --- ▼▼▼ 바로 이 메소드가 없어서 오류가 난 겁니다! ▼▼▼ ---
+    // --- ▼▼▼ 이 메소드를 클래스 맨 아래에 추가해주세요! ▼▼▼ ---
+    public void update(LocalDate diaryDate, String title, String content, String emotion, String photoUrl) {
+        this.diaryDate = diaryDate;
+        this.title = title;
+        this.content = content;
+        this.emotion = emotion;
+        this.photoUrl = photoUrl;
+        this.updatedAt = LocalDateTime.now(); // 수정 시간을 함께 기록합니다.
     }
 }

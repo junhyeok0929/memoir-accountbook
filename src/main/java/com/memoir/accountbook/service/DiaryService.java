@@ -1,30 +1,20 @@
 package com.memoir.accountbook.service;
 
-// 기존 import 구문들
+// --- 기존 import 구문들 ---
 import com.memoir.accountbook.Diary;
 import com.memoir.accountbook.Member;
-import com.memoir.accountbook.dto.DiaryCreateRequestDto;
-import com.memoir.accountbook.dto.DiaryResponseDto;
+import com.memoir.accountbook.Transaction;
+import com.memoir.accountbook.dto.*; // DTO가 많아졌으니 * 로 한번에 import
 import com.memoir.accountbook.repository.DiaryRepository;
 import com.memoir.accountbook.repository.MemberRepository;
+import com.memoir.accountbook.repository.TransactionRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-// ---------------------------------------------
-// ▼▼▼ '통합 조회' 기능을 위해 새로 추가된 import 구문들 ▼▼▼
-// ---------------------------------------------
-import com.memoir.accountbook.Transaction;
-import com.memoir.accountbook.dto.DailyRecordResponseDto;
-import com.memoir.accountbook.dto.TransactionResponseDto;
-import com.memoir.accountbook.repository.TransactionRepository;
 import java.time.LocalDate;
-import java.util.Optional;
-// ---------------------------------------------
-// ▲▲▲ 여기까지가 새로 추가된 import 구문들입니다 ▲▲▲
-// ---------------------------------------------
-
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
@@ -33,11 +23,9 @@ public class DiaryService {
 
     private final DiaryRepository diaryRepository;
     private final MemberRepository memberRepository;
-
-    // ▼▼▼ '통합 조회' 기능을 위해 TransactionRepository 주입 추가 ▼▼▼
     private final TransactionRepository transactionRepository;
 
-    // --- 기존 일기 생성 메소드 (수정 없음) ---
+    // --- 1. 일기 생성 (C) (기존 코드) ---
     @Transactional
     public void createDiary(DiaryCreateRequestDto requestDto) {
         Member member = memberRepository.findById(requestDto.getMemberId())
@@ -55,7 +43,7 @@ public class DiaryService {
         diaryRepository.save(diary);
     }
 
-    // --- 기존 일기 목록 조회 메소드 (수정 없음) ---
+    // --- 2. 일기 목록 조회 (R) (기존 코드) ---
     @Transactional(readOnly = true)
     public List<DiaryResponseDto> findDiariesByMemberId(Long memberId) {
         memberRepository.findById(memberId)
@@ -68,26 +56,55 @@ public class DiaryService {
                 .collect(Collectors.toList());
     }
 
+    // --- 3. 일일 통합 조회 (R) (기존 코드) ---
     @Transactional(readOnly = true)
     public DailyRecordResponseDto getDailyRecord(Long memberId, LocalDate date) {
-
-        // 1. TransactionRepository를 사용해 특정 날짜의 '거래 내역 목록'을 찾습니다.
         List<Transaction> transactions = transactionRepository.findByMember_IdAndTransactionDate(memberId, date);
 
-        // 2. 찾아온 거래 내역 목록을 DTO 목록으로 변환합니다.
         List<TransactionResponseDto> transactionDtos = transactions.stream()
                 .map(TransactionResponseDto::new)
                 .collect(Collectors.toList());
 
-        // 3. DiaryRepository를 사용해 특정 날짜의 '일기'를 찾습니다.
         Optional<Diary> optionalDiary = diaryRepository.findByMember_IdAndDiaryDate(memberId, date);
 
-        // 4. 찾아온 일기(Optional)를 DTO로 변환합니다. (일기가 없으면 null이 됨)
         DiaryResponseDto diaryDto = optionalDiary
-                .map(DiaryResponseDto::new) // 일기가 존재하면 DTO로 변환
-                .orElse(null); // 일기가 존재하지 않으면 null
+                .map(DiaryResponseDto::new)
+                .orElse(null);
 
-        // 5. 변환된 DTO 목록과 DTO 객체를 '통합 DTO'에 담아 반환합니다.
         return new DailyRecordResponseDto(transactionDtos, diaryDto);
+    }
+
+    // ---------------------------------------------
+    // ▼▼▼ 4. 새로 추가된 '일기 수정' (U) 메소드 ▼▼▼
+    // ---------------------------------------------
+    @Transactional
+    public void updateDiary(Long diaryId, DiaryUpdateRequestDto requestDto) {
+        // 1. 데이터베이스에서 수정할 원본 일기를 찾습니다.
+        Diary diary = diaryRepository.findById(diaryId)
+                .orElseThrow(() -> new IllegalArgumentException("해당 일기를 찾을 수 없습니다. id=" + diaryId));
+
+        // 2. 찾아온 엔티티 객체의 update 메소드를 호출하여 값 변경
+        // (이 update 메소드는 Diary 엔티티 클래스 안에 만들어 뒀습니다!)
+        diary.update(
+                requestDto.getDiaryDate(),
+                requestDto.getTitle(),
+                requestDto.getContent(),
+                requestDto.getEmotion(),
+                requestDto.getPhotoUrl()
+        );
+        // 3. @Transactional의 '변경 감지' 기능으로 자동 저장 (save() 불필요)
+    }
+
+    // ---------------------------------------------
+    // ▼▼▼ 5. 새로 추가된 '일기 삭제' (D) 메소드 ▼▼▼
+    // ---------------------------------------------
+    @Transactional
+    public void deleteDiary(Long diaryId) {
+        // 1. 데이터베이스에서 삭제할 원본 일기가 있는지 먼저 확인합니다.
+        Diary diary = diaryRepository.findById(diaryId)
+                .orElseThrow(() -> new IllegalArgumentException("해당 일기를 찾을 수 없습니다. id=" + diaryId));
+
+        // 2. 찾아온 엔티티 객체를 Repository를 통해 삭제합니다.
+        diaryRepository.delete(diary);
     }
 }
