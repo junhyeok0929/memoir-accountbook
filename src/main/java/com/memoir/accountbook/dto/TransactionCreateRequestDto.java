@@ -10,7 +10,6 @@ import java.time.LocalDate;
 @NoArgsConstructor
 public class TransactionCreateRequestDto {
 
-    private Long memberId; // 어떤 회원의 거래내역인지 식별하기 위함
     private LocalDate transactionDate;
     private TransactionType type;
     private Integer amount;

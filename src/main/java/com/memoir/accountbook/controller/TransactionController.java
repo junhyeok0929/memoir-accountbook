@@ -1,16 +1,14 @@
 package com.memoir.accountbook.controller;
 
 import com.memoir.accountbook.dto.TransactionCreateRequestDto;
-import com.memoir.accountbook.dto.TransactionResponseDto; // Response DTO import 확인!
+import com.memoir.accountbook.dto.TransactionResponseDto;
+import com.memoir.accountbook.dto.TransactionUpdateRequestDto;
 import com.memoir.accountbook.service.TransactionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*; // GetMapping, PathVariable import 위해 * 로 변경 확인!
-import com.memoir.accountbook.dto.TransactionUpdateRequestDto; // 수정 DTO import 추가!
-import org.springframework.web.bind.annotation.PutMapping; // PutMapping import 추가!
-import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.*;
 
-import java.util.List; // List import 확인!
+import java.util.List;
 
 @RestController
 @RequiredArgsConstructor
@@ -19,33 +17,39 @@ public class TransactionController {
 
     private final TransactionService transactionService;
 
-    // 거래 내역 생성 API (POST /api/transactions)
+    // --- 1. 거래 내역 생성 (C) (수정 없음) ---
+    // (DTO에서 memberId가 빠졌지만, Controller는 Service를 호출할 뿐이라 수정할 게 없습니다!)
     @PostMapping
     public ResponseEntity<Void> createTransaction(@RequestBody TransactionCreateRequestDto requestDto) {
         transactionService.createTransaction(requestDto);
         return ResponseEntity.ok().build();
     }
 
-    // 특정 회원의 거래 내역 목록 조회 API (GET /api/transactions/member/{memberId})
-    @GetMapping("/member/{memberId}")
-    public ResponseEntity<List<TransactionResponseDto>> findTransactionsByMemberId(@PathVariable Long memberId) {
-        List<TransactionResponseDto> transactions = transactionService.findTransactionsByMemberId(memberId);
-        return ResponseEntity.ok(transactions); // 조회된 목록을 응답 본문에 담아 반환
+    // --- 2. '내' 거래 내역 조회 (R) (API 주소 및 파라미터 변경!) ---
+    // [수정됨!] 주소가 /member/{memberId} -> /me 로 변경
+    @GetMapping("/me")
+    // [수정됨!] @PathVariable Long memberId 파라미터 삭제
+    public ResponseEntity<List<TransactionResponseDto>> findMyTransactions() {
+        // [수정됨!] 서비스의 새로운 메소드 호출
+        List<TransactionResponseDto> transactions = transactionService.findMyTransactions();
+        return ResponseEntity.ok(transactions);
     }
 
-    @PutMapping("/{transactionId}") // PUT 방식으로 /api/transactions/{거래ID} 요청 처리
+    // --- 3. 거래 내역 수정 (U) (수정 없음) ---
+    @PutMapping("/{transactionId}")
     public ResponseEntity<Void> updateTransaction(
             @PathVariable Long transactionId,
             @RequestBody TransactionUpdateRequestDto requestDto) {
 
         transactionService.updateTransaction(transactionId, requestDto);
-        return ResponseEntity.ok().build(); // 수정 성공 응답 (200 OK)
+        return ResponseEntity.ok().build();
     }
 
-    @DeleteMapping("/{transactionId}") // DELETE 방식으로 /api/transactions/{거래ID} 요청 처리
+    // --- 4. 거래 내역 삭제 (D) (수정 없음) ---
+    @DeleteMapping("/{transactionId}")
     public ResponseEntity<Void> deleteTransaction(@PathVariable Long transactionId) {
 
         transactionService.deleteTransaction(transactionId);
-        return ResponseEntity.ok().build(); // 삭제 성공 응답 (200 OK)
+        return ResponseEntity.ok().build();
     }
 }

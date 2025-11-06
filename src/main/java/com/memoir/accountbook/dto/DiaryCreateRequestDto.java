@@ -9,7 +9,6 @@ import java.time.LocalDate;
 @NoArgsConstructor
 public class DiaryCreateRequestDto {
 
-    private Long memberId; // 누가 쓴 일기인지 식별
     private LocalDate diaryDate;
     private String title;
     private String content;
