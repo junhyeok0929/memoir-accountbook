@@ -5,6 +5,7 @@ import com.memoir.accountbook.jwt.JwtTokenProvider; // <--- [추가!] JWT 발급
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -32,6 +33,7 @@ public class SecurityConfig {
 
         // 2. API 경로별 접근 권한 설정 (기존과 동일)
         http.authorizeHttpRequests((authorize) -> authorize
+                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll() // CORS Preflight 요청 허용
                 .requestMatchers("/api/members/signup").permitAll()
                 .requestMatchers("/api/members/login").permitAll()
                 .requestMatchers("/h2-console/**").permitAll()

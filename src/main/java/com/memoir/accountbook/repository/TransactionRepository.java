@@ -7,4 +7,5 @@ import java.time.LocalDate;
 public interface TransactionRepository extends JpaRepository<Transaction, Long> {
     List<Transaction> findByMember_Id(Long memberId);
     List<Transaction> findByMember_IdAndTransactionDate(Long memberId, LocalDate date);
+    List<Transaction> findByMember_IdAndTransactionDateBetween(Long memberId, LocalDate from, LocalDate to);
 }

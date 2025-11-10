@@ -2,17 +2,24 @@ package com.memoir.accountbook.service;
 
 import com.memoir.accountbook.Member;
 import com.memoir.accountbook.Transaction;
+import com.memoir.accountbook.TransactionType;
+import com.memoir.accountbook.dto.MonthlySummaryResponseDto;
 import com.memoir.accountbook.dto.TransactionCreateRequestDto;
 import com.memoir.accountbook.dto.TransactionResponseDto;
 import com.memoir.accountbook.dto.TransactionUpdateRequestDto;
+import com.memoir.accountbook.exception.CustomException;
+import com.memoir.accountbook.exception.ErrorCode;
 import com.memoir.accountbook.repository.MemberRepository;
 import com.memoir.accountbook.repository.TransactionRepository;
-import com.memoir.accountbook.util.SecurityUtil; // <--- [필수!] SecurityUtil import
+import com.memoir.accountbook.util.SecurityUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -22,12 +29,81 @@ public class TransactionService {
     private final TransactionRepository transactionRepository;
     private final MemberRepository memberRepository;
 
-    // --- 1. 거래 내역 생성 (C) (지난번에 수정 완료!) ---
+    @Transactional(readOnly = true)
+    public List<TransactionResponseDto> findMyDailyTransactions(LocalDate date) {
+        String userEmail = SecurityUtil.getCurrentUserEmail();
+        Member member = memberRepository.findByEmail(userEmail)
+                .orElseThrow(() -> new CustomException(ErrorCode.MEMBER_NOT_FOUND));
+
+        List<Transaction> transactions = transactionRepository.findByMember_IdAndTransactionDate(member.getId(), date);
+
+        return transactions.stream()
+                .map(TransactionResponseDto::new)
+                .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public List<TransactionResponseDto> findMyMonthlyTransactions(int year, int month) {
+        String userEmail = SecurityUtil.getCurrentUserEmail();
+        Member member = memberRepository.findByEmail(userEmail)
+                .orElseThrow(() -> new CustomException(ErrorCode.MEMBER_NOT_FOUND));
+
+        YearMonth yearMonth = YearMonth.of(year, month);
+        LocalDate from = yearMonth.atDay(1);
+        LocalDate to = yearMonth.atEndOfMonth();
+
+        List<Transaction> transactions = transactionRepository.findByMember_IdAndTransactionDateBetween(member.getId(), from, to);
+
+        return transactions.stream()
+                .map(TransactionResponseDto::new)
+                .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public MonthlySummaryResponseDto getMonthlySummary(int year, int month) {
+        String userEmail = SecurityUtil.getCurrentUserEmail();
+        Member member = memberRepository.findByEmail(userEmail)
+                .orElseThrow(() -> new CustomException(ErrorCode.MEMBER_NOT_FOUND));
+
+        YearMonth yearMonth = YearMonth.of(year, month);
+        LocalDate from = yearMonth.atDay(1);
+        LocalDate to = yearMonth.atEndOfMonth();
+
+        List<Transaction> transactions = transactionRepository.findByMember_IdAndTransactionDateBetween(member.getId(), from, to);
+
+        long totalIncome = transactions.stream()
+                .filter(t -> t.getType() == TransactionType.INCOME)
+                .mapToLong(Transaction::getAmount)
+                .sum();
+
+        long totalExpense = transactions.stream()
+                .filter(t -> t.getType() == TransactionType.EXPENSE)
+                .mapToLong(Transaction::getAmount)
+                .sum();
+
+        Map<String, Long> incomeByCategory = transactions.stream()
+                .filter(t -> t.getType() == TransactionType.INCOME)
+                .collect(Collectors.groupingBy(Transaction::getCategory, Collectors.summingLong(Transaction::getAmount)));
+
+        Map<String, Long> expenseByCategory = transactions.stream()
+                .filter(t -> t.getType() == TransactionType.EXPENSE)
+                .collect(Collectors.groupingBy(Transaction::getCategory, Collectors.summingLong(Transaction::getAmount)));
+
+        return MonthlySummaryResponseDto.builder()
+                .year(year)
+                .month(month)
+                .totalIncome(totalIncome)
+                .totalExpense(totalExpense)
+                .incomeByCategory(incomeByCategory)
+                .expenseByCategory(expenseByCategory)
+                .build();
+    }
+
     @Transactional
     public void createTransaction(TransactionCreateRequestDto requestDto) {
         String userEmail = SecurityUtil.getCurrentUserEmail();
         Member member = memberRepository.findByEmail(userEmail)
-                .orElseThrow(() -> new IllegalArgumentException("현재 로그인된 회원을 찾을 수 없습니다."));
+                .orElseThrow(() -> new CustomException(ErrorCode.MEMBER_NOT_FOUND));
 
         Transaction transaction = Transaction.builder()
                 .member(member)
@@ -41,16 +117,12 @@ public class TransactionService {
         transactionRepository.save(transaction);
     }
 
-    // --- 2. '본인'의 거래 내역 조회 (R) (파라미터가 바뀜!) ---
     @Transactional(readOnly = true)
-    // [수정됨!] (Long memberId) 파라미터가 삭제되었습니다.
     public List<TransactionResponseDto> findMyTransactions() {
-        // [수정됨!] SecurityUtil로 '현재 로그인한 사용자'의 이메일을 가져옵니다.
         String userEmail = SecurityUtil.getCurrentUserEmail();
         Member member = memberRepository.findByEmail(userEmail)
-                .orElseThrow(() -> new IllegalArgumentException("현재 로그인된 회원을 찾을 수 없습니다."));
+                .orElseThrow(() -> new CustomException(ErrorCode.MEMBER_NOT_FOUND));
 
-        // [수정됨!] 파라미터 memberId가 아닌, 찾은 member 객체의 ID를 사용합니다.
         List<Transaction> transactions = transactionRepository.findByMember_Id(member.getId());
 
         return transactions.stream()
@@ -58,23 +130,33 @@ public class TransactionService {
                 .collect(Collectors.toList());
     }
 
-    // --- 3. '본인'의 거래 내역 수정 (U) (본인 확인 로직 추가!) ---
-    @Transactional
-    public void updateTransaction(Long transactionId, TransactionUpdateRequestDto requestDto) {
-        // [추가!] 현재 로그인한 사용자의 이메일을 가져옵니다.
+    @Transactional(readOnly = true)
+    public TransactionResponseDto findMyTransactionById(Long transactionId) {
         String userEmail = SecurityUtil.getCurrentUserEmail();
+        Member member = memberRepository.findByEmail(userEmail)
+                .orElseThrow(() -> new CustomException(ErrorCode.MEMBER_NOT_FOUND));
 
-        // 1. 수정할 거래 내역을 찾습니다.
         Transaction transaction = transactionRepository.findById(transactionId)
-                .orElseThrow(() -> new IllegalArgumentException("해당 거래 내역을 찾을 수 없습니다. id=" + transactionId));
+                .orElseThrow(() -> new CustomException(ErrorCode.TRANSACTION_NOT_FOUND));
 
-        // 2. [★핵심 인가 로직★] 거래 내역의 주인(Member) 이메일과
-        //    현재 로그인한 사용자의 이메일이 일치하는지 확인합니다.
-        if (!transaction.getMember().getEmail().equals(userEmail)) {
-            throw new IllegalArgumentException("본인의 거래 내역만 수정할 수 있습니다."); // 일치하지 않으면 예외 발생!
+        if (!transaction.getMember().getId().equals(member.getId())) {
+            throw new CustomException(ErrorCode.FORBIDDEN_ACCESS);
         }
 
-        // 3. (검증 통과) 수정 로직 수행
+        return new TransactionResponseDto(transaction);
+    }
+
+    @Transactional
+    public void updateTransaction(Long transactionId, TransactionUpdateRequestDto requestDto) {
+        String userEmail = SecurityUtil.getCurrentUserEmail();
+
+        Transaction transaction = transactionRepository.findById(transactionId)
+                .orElseThrow(() -> new CustomException(ErrorCode.TRANSACTION_NOT_FOUND));
+
+        if (!transaction.getMember().getEmail().equals(userEmail)) {
+            throw new CustomException(ErrorCode.FORBIDDEN_ACCESS);
+        }
+
         transaction.update(
                 requestDto.getTransactionDate(),
                 requestDto.getType(),
@@ -84,23 +166,17 @@ public class TransactionService {
         );
     }
 
-    // --- 4. '본인'의 거래 내역 삭제 (D) (본인 확인 로직 추가!) ---
     @Transactional
     public void deleteTransaction(Long transactionId) {
-        // [추가!] 현재 로그인한 사용자의 이메일을 가져옵니다.
         String userEmail = SecurityUtil.getCurrentUserEmail();
 
-        // 1. 삭제할 거래 내역을 찾습니다.
         Transaction transaction = transactionRepository.findById(transactionId)
-                .orElseThrow(() -> new IllegalArgumentException("해당 거래 내역을 찾을 수 없습니다. id=" + transactionId));
+                .orElseThrow(() -> new CustomException(ErrorCode.TRANSACTION_NOT_FOUND));
 
-        // 2. [★핵심 인가 로직★] 거래 내역의 주인 이메일과
-        //    현재 로그인한 사용자의 이메일이 일치하는지 확인합니다.
         if (!transaction.getMember().getEmail().equals(userEmail)) {
-            throw new IllegalArgumentException("본인의 거래 내역만 삭제할 수 있습니다."); // 일치하지 않으면 예외 발생!
+            throw new CustomException(ErrorCode.FORBIDDEN_ACCESS);
         }
 
-        // 3. (검증 통과) 삭제 로직 수행
         transactionRepository.delete(transaction);
     }
 }

@@ -12,6 +12,8 @@ import com.memoir.accountbook.repository.MemberRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import com.memoir.accountbook.exception.CustomException;
+import com.memoir.accountbook.exception.ErrorCode;
 import org.springframework.transaction.annotation.Transactional;
 
 
@@ -29,7 +31,7 @@ public class MemberService {
 
 
         if (memberRepository.findByEmail(requestDto.getEmail()).isPresent()) {
-            throw new IllegalArgumentException("이미 존재하는 이메일입니다.");
+            throw new CustomException(ErrorCode.EMAIL_ALREADY_EXISTS);
         }
 
         Member member = Member.builder()
@@ -45,12 +47,12 @@ public class MemberService {
     public TokenResponseDto login(LoginRequestDto requestDto) {
 
         Member member = memberRepository.findByEmail(requestDto.getEmail())
-                .orElseThrow(() -> new IllegalArgumentException("가입되지 않은 이메일입니다."));
+                .orElseThrow(() -> new CustomException(ErrorCode.MEMBER_NOT_FOUND));
 
 
 
         if (!passwordEncoder.matches(requestDto.getPassword(), member.getPassword())) {
-            throw new IllegalArgumentException("잘못된 비밀번호입니다.");
+            throw new CustomException(ErrorCode.INVALID_PASSWORD);
         }
         String accessToken = jwtTokenProvider.createToken(member.getEmail());
         return new TokenResponseDto(accessToken);
